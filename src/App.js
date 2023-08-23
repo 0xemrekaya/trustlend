@@ -1,7 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 
+
+import TrustLend from './artifacts/contracts/TrustLend.sol/TrustLend.json';
+import wETH from './artifacts/contracts/TrustLend.sol/wETH.json';
+import IUSD from './artifacts/contracts/TrustLend.sol/IUSDContract.json';
+import { ethers } from 'ethers';
+
 function App() {
+  const [showPopup, setShowPopup] = useState(false);
+  const [amountLender, setAmountLender] = useState("");
+  const [collateralLender, setCollateralLender] = useState("");
+  const [totalLender, setTotalLender] = useState("");
+  const [durationLender, setDurationLender] = useState("");
+  let [address, setAddress] = useState(null);
   const [lenderAmount, setLenderAmount] = useState(100);
   const [interestRate, setInterestRate] = useState(10);
   const [coinAmount, setCoinAmount] = useState(20);
@@ -9,8 +21,83 @@ function App() {
   const [borrowedAmount, setBorrowedAmount] = useState(110);
   const [loanDuration, setLoanDuration] = useState(5);
   const [isLoanPaid, setIsLoanPaid] = useState(false);
-  const [ethPrice, setEthPrice] = useState(1500);
+  let [ethPrice, setEthPrice] = useState(0);
   const [remainingTime, setRemainingTime] = useState(loanDuration * 30 * 24 * 60 * 60);
+  const [amount, setAmount] = useState("");
+  const [collateral, setCollateral] = useState("");
+  const [total, setTotal] = useState("");
+  const [duration, setDuration] = useState("");
+  let [tx, setTx] = useState("");
+
+  const TrustLend_ABI = TrustLend.abi;
+  const TrustLend_Address = "0x7b6604E167f9f7eB56c95BDd2305f6aDE641D4e2";
+  const SERVER_URL = process.env.RPC_URL_HAQQTEST2;
+  const provider = new ethers.providers.Web3Provider(window.ethereum)
+  const TrustLendProvider = new ethers.Contract(TrustLend_Address, TrustLend_ABI, provider);
+  const signer = provider.getSigner();
+  const TrustLendSigner = new ethers.Contract(TrustLend_Address, TrustLend_ABI, signer);
+
+  let isMetamaskConnected = false;
+
+  const metamaskWalletConnect = async () => {
+    if (window.ethereum) {
+      try {
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        address = await signer.getAddress();
+        setAddress(address);
+        isMetamaskConnected = true;
+        const shortAddress = address.substring(0, 10);
+        const metamaskStatus = document.getElementById("metamask-status");
+        if (isMetamaskConnected) {
+          metamaskStatus.classList.add("metamask-connected");
+          metamaskStatus.textContent = shortAddress + "...";
+        } else {
+          metamaskStatus.classList.add("metamask-disconnected");
+          metamaskStatus.textContent = "Disconnected";
+        }
+
+        await setSellers();
+      } catch (error) {
+        console.error(error);
+      }
+    } else {
+      console.error('There is no web3 wallet');
+    }
+  };
+
+  const setSellers = async () => {
+    const sellerList = await TrustLendProvider.sellers;
+     console.log( await sellerList);
+  };
+
+
+  const handleAmountChange = (event) => {
+    setAmount(event.target.value);
+  };
+
+  const handleCollateralChange = (event) => {
+    setCollateral(event.target.value);
+  };
+
+  const handleTotalChange = (event) => {
+    setTotal(event.target.value);
+  };
+
+  const handleDurationChange = (event) => {
+    setDuration(event.target.value);
+  };
+
+  const handleLendClick = async () => {
+    if (!provider) {
+      alert('You need to connect to MetaMask first.');
+      return;
+    }
+    tx = await TrustLendSigner.lend(amount, collateral, total, duration);
+    await tx.wait();
+    setTx(tx.hash);
+    console.log("Loan lent!");
+  };
+
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -98,17 +185,56 @@ function App() {
       <div className="header">
         <button className="header-button">Whitepaper</button>
         <button className="header-button">Roadmap</button>
-        <button className="header-button">Connect Wallet</button>
+        <div>
+          <span id="metamask-status" className="metamask-status"></span>
+          {address ? (null
+          ) : (
+            <button className="header-button" onClick={metamaskWalletConnect}>Connect with MetaMask</button>
+          )}
+        </div>
       </div>
       <div className="price-tracker">
         <button className="price-button">
-          1 ETH = ${ethPrice}
+          1 ETH = $1000
         </button>
         <button className="price-button">
           1 ISLM = $5
         </button>
       </div>
       <h1>TrustLend</h1>
+      <div>
+        <button onClick={() => setShowPopup(true)} className="create-lend-button">Create a Lend</button>
+        {showPopup && (
+          <div className="popup">
+            <div className="popup-inner">
+              <button className="close-button" onClick={() => setShowPopup(false)}>×</button>
+              <h2>Create a Lend</h2>
+              <form>
+                <label>
+                  Amount:
+                  <input type="text" value={amount} onChange={handleAmountChange} />
+                </label>
+                <label>
+                  Collateral:
+                  <input type="text" value={collateral} onChange={handleCollateralChange} />
+                </label>
+                <label>
+                  Total:
+                  <input type="text" value={total} onChange={handleTotalChange} />
+                </label>
+                <label>
+                  Duration:
+                  <input type="text" value={duration} onChange={handleDurationChange} />
+                </label>
+                <button type="button" onClick={handleLendClick} className="lend-button">
+                  Lend
+                </button>
+                Transaction Hash: {tx}
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
       <div className="lender-list">
         <h2>Lenders</h2>
         <table>
@@ -147,6 +273,8 @@ function App() {
               &times;
             </span>
             <h2>Lender Details</h2>
+            <p>Amount: {selectedLender} Amount</p>
+            <p>Collateral: {selectedLender.collateral} ETH</p>
             <p>Collateral: {selectedLender.collateral} ETH</p>
             <p>Loan Duration: {selectedLender.loanDuration} months</p>
             <button className="borrow-button" onClick={handleBorrow}>
